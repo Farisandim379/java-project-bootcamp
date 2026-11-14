@@ -40,3 +40,6 @@ minio:
   bucket:
     name: ${MINIO_BUCKET:product-report}
   presigned-expiry-minutes: 10
+
+dummyjson:
+  url: ${DUMMYJSON_URL:https://dummyjson.com}

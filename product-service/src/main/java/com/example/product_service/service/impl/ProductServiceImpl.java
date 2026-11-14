@@ -1,5 +1,6 @@
 package com.example.product_service.service.impl;
 
+import com.example.product_service.client.DummyJsonWriteClient;
 import com.example.product_service.dto.request.ProductCreateRequest;
 import com.example.product_service.dto.request.ProductImportItemDto;
 import com.example.product_service.dto.request.ProductUpdateRequest;
@@ -18,7 +19,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -28,6 +31,7 @@ public class ProductServiceImpl implements ProductService {
 
     private final ProductRepository productRepository;
     private final ProductEventProducer productEventProducer;
+    private final DummyJsonWriteClient dummyJsonWriteClient;
 
     @Override
     @Transactional
@@ -52,6 +56,9 @@ public class ProductServiceImpl implements ProductService {
 
         // Event-Driven Kafka (B2)
         productEventProducer.publishProductCreated(saved.getId(), saved.getNama(), saved.getBrand(), saved.getHarga());
+
+        // DummyJSON Write Simulation (B4.1 - B4.3)
+        simulateDummyJsonAdd(saved.getNama(), saved.getBrand(), saved.getHarga());
 
         return toResponse(saved);
     }
@@ -96,6 +103,11 @@ public class ProductServiceImpl implements ProductService {
         product.setUpdatedAt(LocalDateTime.now());
 
         Product updated = productRepository.save(product);
+
+        // DummyJSON Write Simulation (B4)
+        Long dummyId = updated.getDummyJsonId() != null ? updated.getDummyJsonId() : 1L;
+        simulateDummyJsonUpdate(dummyId, updated.getNama(), updated.getHarga());
+
         return toResponse(updated);
     }
 
@@ -107,6 +119,10 @@ public class ProductServiceImpl implements ProductService {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ProductNotFoundException(id));
         productRepository.delete(product);
+
+        // DummyJSON Write Simulation (B4)
+        Long dummyId = product.getDummyJsonId() != null ? product.getDummyJsonId() : 1L;
+        simulateDummyJsonDelete(dummyId);
     }
 
     @Override
@@ -155,6 +171,41 @@ public class ProductServiceImpl implements ProductService {
         }
 
         return count;
+    }
+
+    private void simulateDummyJsonAdd(String title, String brand, Double price) {
+        try {
+            Map<String, Object> req = new HashMap<>();
+            req.put("title", title);
+            req.put("brand", brand);
+            req.put("price", price);
+            Map<String, Object> response = dummyJsonWriteClient.addProduct(req);
+            log.info("[DummyJSON Simulation - ADD] Berhasil mengirim produk baru ke DummyJSON: {}", response);
+        } catch (Exception e) {
+            // B4.2: Kegagalan DummyJSON tidak membatalkan simpan di database kita
+            log.warn("[DummyJSON Simulation - ADD] Gagal sinkronisasi simulasi ke DummyJSON: {}", e.getMessage());
+        }
+    }
+
+    private void simulateDummyJsonUpdate(Long dummyId, String title, Double price) {
+        try {
+            Map<String, Object> req = new HashMap<>();
+            req.put("title", title);
+            req.put("price", price);
+            Map<String, Object> response = dummyJsonWriteClient.updateProduct(dummyId, req);
+            log.info("[DummyJSON Simulation - UPDATE] Berhasil update simulasi produk id={} ke DummyJSON: {}", dummyId, response);
+        } catch (Exception e) {
+            log.warn("[DummyJSON Simulation - UPDATE] Gagal update simulasi ke DummyJSON id={}: {}", dummyId, e.getMessage());
+        }
+    }
+
+    private void simulateDummyJsonDelete(Long dummyId) {
+        try {
+            Map<String, Object> response = dummyJsonWriteClient.deleteProduct(dummyId);
+            log.info("[DummyJSON Simulation - DELETE] Berhasil delete simulasi produk id={} ke DummyJSON: {}", dummyId, response);
+        } catch (Exception e) {
+            log.warn("[DummyJSON Simulation - DELETE] Gagal delete simulasi ke DummyJSON id={}: {}", dummyId, e.getMessage());
+        }
     }
 
     private ProductResponse toResponse(Product p) {

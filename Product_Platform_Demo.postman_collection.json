@@ -1,0 +1,214 @@
+{
+  "info": {
+    "name": "Product Platform - Final Project Demo",
+    "description": "Postman Collection urut sesuai alur demo 10 menit Final Project",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Auth - Register User Baru",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"demo_admin\",\n  \"password\": \"rahasia123\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/auth/register",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["auth", "register"]
+        }
+      }
+    },
+    {
+      "name": "2. Auth - Login & Dapatkan JWT",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();",
+              "if (jsonData && jsonData.data && jsonData.data.token) {",
+              "    pm.environment.set(\"jwt_token\", jsonData.data.token);",
+              "    pm.globals.set(\"jwt_token\", jsonData.data.token);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"demo_admin\",\n  \"password\": \"rahasia123\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/auth/login",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "3. Gateway Check - POST Product Tanpa Token (Harus 401)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nama\": \"Galaxy S24\",\n  \"brand\": \"Samsung\",\n  \"harga\": 1200.0,\n  \"kategori\": \"smartphones\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/product",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["product"]
+        }
+      }
+    },
+    {
+      "name": "4. Product - POST Product Valid dengan Token (Harus 201)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nama\": \"Galaxy S24 Ultra\",\n  \"brand\": \"Samsung\",\n  \"harga\": 1499.0,\n  \"kategori\": \"smartphones\",\n  \"rating\": 4.8\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/product",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["product"]
+        }
+      }
+    },
+    {
+      "name": "5. Product - POST Product Nama Kosong (Harus 400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nama\": \"\",\n  \"brand\": \"Samsung\",\n  \"harga\": -500.0,\n  \"kategori\": \"smartphones\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/product",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["product"]
+        }
+      }
+    },
+    {
+      "name": "6. Product - GET Product By ID (Test Redis Cache Hit B1)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:8080/product/1",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["product", "1"]
+        }
+      }
+    },
+    {
+      "name": "7. Product - GET Filter ?huruf= (Case-Insensitive W2.4)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:8080/product?huruf=galaxy",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["product"],
+          "query": [
+            { "key": "huruf", "value": "galaxy" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "8. Scheduler - Picu Impor Manual DummyJSON (W5.7)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:8080/scheduler/import",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["scheduler", "import"]
+        }
+      }
+    },
+    {
+      "name": "9. Security Check - Panggil Endpoint Internal Lewat Gateway (Harus Ditolak W5.7)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "[]"
+        },
+        "url": {
+          "raw": "http://localhost:8080/internal/products/import",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["internal", "products", "import"]
+        }
+      }
+    },
+    {
+      "name": "10. Bonus B3 - Generate Laporan CSV ke MinIO",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+        ],
+        "url": {
+          "raw": "http://localhost:8080/product/report",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["product", "report"]
+        }
+      }
+    }
+  ]
+}
