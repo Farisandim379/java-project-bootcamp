@@ -102,26 +102,50 @@ Wajib dijalankan secara berurutan:
 5. **`api-gateway`** (port 8080)
 
 ---
+## 🌟 Fitur Tambahan
 
-## 🌟 Fitur Bonus yang Diimplementasikan (+15 Poin)
+Beberapa fitur tambahan yang sudah diimplementasikan pada aplikasi:
 
-* **B1 — Redis Cache (+3):** Detail produk disimpan di Redis dengan key `product-platform::product::{id}` dan TTL 10 menit. Query database hanya terjadi saat *cache miss*, dan otomatis dibersihkan (`@CacheEvict`) saat update atau delete.
-* **B2 — Kafka Event (+3):** Setiap produk baru menerbitkan event ke topic `product-created`. `ProductEventConsumer` membaca event dan mencatat ringkasan ke log.
-* **B3 — Laporan CSV ke MinIO (+3):** Endpoint `POST /product/report` menghasilkan file CSV berisi daftar produk dalam periode tertentu, meng-upload ke bucket MinIO, dan mengembalikan presigned URL unduh berdurasi 10 menit.
-* **B4 — Feign DummyJSON Write Simulation (+3):** Saat produk dibuat, diubah, atau dihapus, perubahan juga dikirim ke DummyJSON (`/products/add`, `/products/{id}`). Kegagalan DummyJSON tidak membatalkan transaksi DB lokal.
-* **B5 — AOP Logging Durasi (+3):** `LoggingAspect` mencatat nama method di layer service, argumen (dengan penyembunyian/masking data sensitif), durasi eksekusi dalam milidetik, serta exception sebelum ditangani Global Exception Handler.
+- **Redis Cache:** Menyimpan detail produk di Redis menggunakan key `product-platform::product::{id}` dengan TTL 10 menit. Jika data tersedia di cache, aplikasi tidak perlu mengambilnya kembali dari database. Cache otomatis dihapus ketika produk di-update atau dihapus menggunakan `@CacheEvict`.
+
+- **Kafka Event:** Setiap produk baru berhasil dibuat, aplikasi mengirimkan event ke topic `product-created`. Event tersebut diterima oleh `ProductEventConsumer` dan ringkasan datanya dicatat melalui log.
+
+- **Laporan CSV ke MinIO:** Endpoint `POST /product/report` digunakan untuk membuat laporan produk dalam format CSV berdasarkan periode tertentu. File kemudian diunggah ke MinIO dan aplikasi mengembalikan presigned URL yang dapat digunakan untuk mengunduh file selama 10 menit.
+
+- **Feign DummyJSON Write Simulation:** Operasi create, update, dan delete produk juga diteruskan ke DummyJSON melalui Feign Client menggunakan endpoint `/products/add` dan `/products/{id}`. Kegagalan request ke DummyJSON tidak memengaruhi perubahan data di database lokal.
+
+- **AOP Logging Durasi:** Menggunakan `LoggingAspect` untuk mencatat aktivitas method pada layer service, meliputi nama method, argumen (dengan masking data sensitif), durasi eksekusi, dan exception sebelum ditangani oleh Global Exception Handler.
 
 ---
 
-## 📋 Catatan Keputusan (Architecture Decision Records)
+## 📋 Catatan Implementasi dan Keputusan Teknis
 
-1. **Masa Berlaku JWT Token (W1.3):**
-   * Token JWT diatur dengan masa aktif (expiration) selama **24 jam (86.400.000 ms)**. Durasi ini dipilih sebagai titik tengah yang optimal untuk kemudahan pengujian dan sesi demo tanpa perlu sering login ulang, namun tetap memiliki batas waktu kedaluwarsa untuk memitigasi risiko keamanan.
-2. **Pencegahan Data Duplikat pada Impor DummyJSON (W5.5):**
-   * Setiap produk dari DummyJSON memiliki ID referensi unik (`dummyJsonId`). Pengecekan duplikasi dilakukan di layer `product-service` sebelum entity disimpan ke database dengan memeriksa kecocokan `dummyJsonId` atau kombinasi `nama` dan `brand`. Eksekusi impor berulang akan mengabaikan produk yang sudah ada sehingga data tidak pernah ganda.
-3. **Penolakan Rating < 3 di Layer Service (W5.4):**
-   * Aturan bisnis penolakan produk dengan rating < 3 diimplementasikan di `product-service` (bukan di scheduler), untuk memastikan integritas data tetap terpusat dan konsisten baik produk dimasukkan melalui scheduler, impor manual, maupun jalur lainnya. Dari 16 produk smartphone DummyJSON, 2 produk (`iPhone 5s` rating 2.83 dan `iPhone X` rating 2.51) berhasil ditolak sehingga tepat **14 dari 16 produk tersimpan**.
-4. **Resiliency Feign & Isolasi Database Scheduler (W5.3 & W5.6):**
-   * `scheduler-service` dirancang stateless tanpa akses langsung ke PostgreSQL untuk mematuhi prinsip *loose coupling* dan *single responsibility*. Pemanggilan Feign dibungkus dengan defensive exception handling agar scheduler tetap tangguh dan tidak crash saat DummyJSON atau `product-service` mengalami *network timeout*.
-5. **Ketahanan Kegagalan DummyJSON Write Simulation (B4.2):**
-   * Sinkronisasi ke DummyJSON pada operasi create, update, dan delete bersifat simulasi eksternal. Apabila DummyJSON gagal merespon atau terjadi gangguan internet, transaksi database lokal tetap dianggap berhasil. Keputusan ini diambil agar ketersediaan (*availability*) sistem utama kita tidak terblokir oleh layanan pihak ketiga.
+Bagian ini menjelaskan beberapa keputusan yang digunakan selama pengembangan, termasuk alasan pemilihan pendekatan dan penanganan kondisi tertentu.
+
+### 1. Masa Berlaku JWT Token (W1.3)
+
+JWT diatur agar berlaku selama **24 jam (86.400.000 ms)**. Durasi ini digunakan agar proses pengujian dan demo tidak terganggu karena harus login berulang kali. Meskipun demikian, token tetap memiliki waktu kedaluwarsa sehingga tidak berlaku selamanya.
+
+### 2. Pencegahan Data Duplikat saat Impor DummyJSON (W5.5)
+
+Setiap produk yang diambil dari DummyJSON memiliki `dummyJsonId` sebagai ID referensi. Sebelum menyimpan produk, `product-service` akan memeriksa apakah produk dengan `dummyJsonId` yang sama sudah ada. Pengecekan juga dilakukan berdasarkan kombinasi `nama` dan `brand` untuk menghindari data yang sama masuk lebih dari sekali.
+
+Dengan pengecekan ini, proses impor dapat dijalankan berulang kali tanpa membuat data produk menjadi duplikat.
+
+### 3. Validasi Rating Produk (W5.4)
+
+Produk dengan rating di bawah 3 tidak akan disimpan ke database. Validasi ini ditempatkan di layer `product-service`, bukan di scheduler, agar aturan tersebut tetap berlaku untuk semua jalur pemasukan data.
+
+Pada pengujian menggunakan 16 data smartphone dari DummyJSON, terdapat 2 produk yang ditolak karena rating-nya di bawah 3, yaitu `iPhone 5s` (2.83) dan `iPhone X` (2.51). Dengan demikian, **14 dari 16 produk berhasil disimpan**.
+
+### 4. Penanganan Error pada Scheduler (W5.3 & W5.6)
+
+`Scheduler-service` tidak memiliki akses langsung ke PostgreSQL. Semua komunikasi dengan `product-service` dilakukan melalui Feign Client agar tanggung jawab masing-masing service tetap terpisah.
+
+Pemanggilan API juga dilengkapi dengan exception handling. Jadi, ketika DummyJSON atau `product-service` tidak merespons karena timeout maupun masalah jaringan, scheduler tetap dapat berjalan dan tidak langsung berhenti karena error tersebut.
+
+### 5. Penanganan Kegagalan Sinkronisasi DummyJSON (B4.2)
+
+Request ke DummyJSON saat create, update, dan delete hanya digunakan untuk simulasi komunikasi dengan layanan eksternal. Data utama tetap disimpan dan dikelola di database lokal.
+
+Jika request ke DummyJSON gagal, operasi pada database lokal tetap dilanjutkan dan tidak dibatalkan. Dengan begitu, gangguan pada layanan eksternal tidak ikut mengganggu proses utama aplikasi.
